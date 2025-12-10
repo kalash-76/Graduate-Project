@@ -44,6 +44,9 @@ def build_cnn(shape):
     return model
 
 def filter_nc_by_coords(file_list, bbox):
+    """
+    Filter nc files by radar site coords for Dixie Alley bounding box.
+    """
     lon_min, lat_min, lon_max, lat_max = bbox
 
     filtered_files = []
@@ -70,15 +73,14 @@ def filter_nc_by_coords(file_list, bbox):
 def load_vel_single_sweep(file_path, sweep_index=0):
     """
     Load VEL for one sweep and convert category to binary labels.
-    Returns:
-        X: (time, azimuth, range, 1)
-        y: binary labels
     """
     ds = xr.open_dataset(file_path)
     
     # Input
     X = ds['VEL'].isel(sweep=sweep_index).values
     X = X[..., np.newaxis]  # add channel dimension
+    
+    # Convert NaNs to 0 and then add mask for model
     mask = ~np.isnan(X)
     mask = mask.astype(float)
     X_filled = np.nan_to_num(X, nan=0.0)
@@ -128,7 +130,7 @@ subset_test = catalog[
     (catalog['type']=='test')
 ]
 
-
+# Get file list from TorNet Files in parent dir
 if not os.path.exists('train_file_list.txt'):
     train_file_list = [os.path.join(data_root,f) for f in subset_train.filename]
     print('Found',len(train_file_list),'training files')
@@ -155,6 +157,7 @@ else:
     with open('test_file_list.txt', 'r') as f:
         test_file_list_filtered = [line.strip() for line in f]
 
+# Get X and y from files
 X_list, y_list = [], []
 
 for f in train_file_list_filtered:
@@ -191,7 +194,7 @@ history = cnn.fit(
     X_train,
     y_train,
     batch_size=32,
-    epochs=5,
+    epochs=8,
     shuffle=True,
     validation_split=0.30
     )
@@ -229,7 +232,7 @@ print("F1-score:", f1)
 recall = recall_score(y_test, y_pred)
 print("Recall:", recall)
 
-# AUC
+# ROC & AUC
 fpr, tpr, thresholds = roc_curve(y_test, y_prob)
 auc = roc_auc_score(y_test, y_prob)
 
